@@ -1,22 +1,15 @@
-# 🤖 Bot Tài Xỉu Telegram – Railway
+# 🤖 BOT TELEGRAM TÀI/XỈU MD5 - HITCLUB
 
-Bot auto gửi kết quả Tài/Xỉu từ API B52 mỗi 5 giây, phân tích chuỗi MD5 bằng AI, chạy 24/7 trên Railway.
+Bot Telegram tự động phân tích kết quả Tài/Xỉu từ chuỗi MD5 lấy từ API HitClub. Bot tự động gửi tin nhắn mỗi khi có phiên mới và giữ hoạt động 24/7 nhờ Flask.
 
-## Cách deploy
+---
 
-1. Fork repo này
-2. Deploy trên https://railway.app (Deploy from GitHub)
-3. Thêm biến môi trường:
+## ⚙️ Cấu hình
 
-| Tên       | Giá trị           |
-|-----------|-------------------|
-| BOT_TOKEN | token bot Telegram |
-| CHAT_ID   | chat ID nhóm/cá nhân |
+- **Bot Token**: Lấy từ [@BotFather](https://t.me/BotFather)
+- **Chat ID**: ID nhóm Telegram bạn muốn gửi kết quả vào
+- **API URL**: Đường dẫn API JSON có thông tin kết quả Tài/Xỉu
 
-## Tính năng
+---
 
-- Lấy dữ liệu API
-- Phân tích MD5 nâng cao
-- Gửi tin nhắn Telegram đẹp
-
-> Admin: ExTaiXiu - MR DANEl
+## 📦 File cấu trúc
