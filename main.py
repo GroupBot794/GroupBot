@@ -1,96 +1,113 @@
-import requests
-import time
-from flask import Flask
-from threading import Thread
 import telebot
+from flask import Flask
+import threading
+import requests
 import os
+import time
 
-# LẤY TOKEN VÀ CHAT_ID TỪ BIẾN MÔI TRƯỜNG
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-CHAT_ID = os.environ.get("CHAT_ID")
+API_TOKEN = os.getenv("API_TOKEN", "YOUR_BOT_TOKEN")
+CHAT_ID = int(os.getenv("CHAT_ID", "-1002725702609"))
+API_URL = os.getenv("API_URL", "http://103.20.103.139:3080/api/hit?key=ditmehtddtrantuananh")
 
-API_URL = "http://103.20.103.139:3001/api/b52?key=ditmehtddtrantuananh"
-
-bot = telebot.TeleBot(BOT_TOKEN)
-
-# Flask giữ cho Railway không tắt
+bot = telebot.TeleBot(API_TOKEN)
 app = Flask(__name__)
-@app.route('/')
-def home():
-    return "Bot Tài Xỉu đang chạy..."
 
-def run_flask():
-    app.run(host="0.0.0.0", port=8080)
+def analyze_md5_hitclub(md5_str):
+    if len(md5_str) != 32:
+        return {"error": "MD5 không hợp lệ"}
+    hex_12 = md5_str[:8] + md5_str[-4:]
+    dec = int(hex_12, 16)
+    ratio = dec / 281474976710656  # 16^12
+    percent = round(ratio * 100, 2)
+    result = "Xỉu" if ratio < 0.5 else "Tài"
+    return {
+        "hex": hex_12,
+        "dec": dec,
+        "ratio": ratio,
+        "percent": percent,
+        "result": result
+    }
 
-# Thuật toán phân tích MD5 chi tiết
-def analyze_md5_detailed(md5_hash: str):
-    digit_values = [int(c, 16) for c in md5_hash if c.isdigit()]
-    letter_values = [ord(c) for c in md5_hash if c.isalpha()]
-    if not digit_values and not letter_values:
-        return "Xỉu", 0.0, 100.0
-    elif not digit_values:
-        return "Xỉu", 0.0, 100.0
-    elif not letter_values:
-        return "Tài", 100.0, 0.0
+def format_hitclub_message(prev_session, prev_dice, prev_result, current_session, current_md5):
+    dice_emoji = {1:"🎲 1", 2:"🎲 2", 3:"🎲 3", 4:"🎲 4", 5:"🎲 5", 6:"🎲 6"}
+    dice_str = ' '.join([dice_emoji.get(d, str(d)) for d in prev_dice])
+    total = sum(prev_dice)
+    analysis = analyze_md5_hitclub(current_md5)
+    percent_tai = analysis['percent']
+    percent_xiu = round(100 - percent_tai, 2)
+    priority = "Tài" if percent_tai >= 50 else "Xỉu"
+    icon_priority = "🔵" if priority == "Tài" else "🔴"
+    dec_formatted = f"{analysis['dec']:,}"
 
-    digit_sum = sum(digit_values)
-    letter_sum = sum(letter_values)
-    xor_digit = 0
-    for d in digit_values: xor_digit ^= d
-    xor_letter = 0
-    for l in letter_values: xor_letter ^= l
-    squared_digit = sum(x**2 for x in digit_values) % 100
-    squared_letter = sum(x**2 for x in letter_values) % 100
-    hex_blocks = [int(md5_hash[i:i+4], 16) for i in range(0, len(md5_hash), 4)]
-    hex_weighted = sum((i+1)*v for i, v in enumerate(hex_blocks)) % 100
-    even = sum(1 for x in digit_values if x % 2 == 0)
-    odd = len(digit_values) - even
+    return f"""🎯 𝗕𝗢𝗧 𝗣𝗛Â𝗡 𝗧Í𝗖𝗛 𝗛𝗜𝗧𝗖𝗟𝗨𝗕
+━━━━━━━━━━━━━━━━━━━━━━
+🔙 𝗣𝗵𝗶𝗲̂𝗻 𝗧𝗿𝘂̛𝗼̛́𝗰: #{prev_session}
+🎲 𝗫𝘂́𝗰 𝘅ắ𝗰: {dice_str}
+➕ 𝗧𝗼̂̉𝗻𝗴: {total}
+🏁 𝗞𝗲̂́𝘁 𝗾𝘂𝗮̉: {'🔵' if prev_result == 'Tài' else '🔴'} {prev_result}
+━━━━━━━━━━━━━━━━━━━━━━
+📌 𝗣𝗵𝗶𝗲̂𝗻 𝗛𝗶𝗲̣̂𝗻 𝗧𝗮̣𝗶: #{current_session}
+🔐 𝗠𝗮̃ 𝗠𝗗𝟱: `{current_md5}`
+🧮 𝗛𝗲𝘅 𝟭𝟮: `{analysis['hex']}`
+📉 𝗧𝗵𝗮̣̂𝗽 𝗽𝗵â𝗻: {dec_formatted}
+📊 𝗧ỉ 𝗟ệ:
+┣ 📈 Tài: {percent_tai}%
+┣ 📉 Xỉu: {percent_xiu}%
+┗ 🎯 Ưu tiên: {icon_priority} {priority}
+━━━━━━━━━━━━━━━━━━━━━━
+⏳ 𝗖𝗵𝗼̛̀ 𝗽𝗵𝗶𝗲̂𝗻 𝘁𝗶𝗲̂́𝗽 𝘁𝗵𝗲𝗼...
+"""
 
-    score = (
-        (digit_sum * 2) + letter_sum +
-        (xor_digit * 3) + xor_letter +
-        (squared_digit * 2) + squared_letter +
-        hex_weighted + (even * 5) - (odd * 3)
-    ) % 100
+last_session = 0
 
-    result = "Tài" if score % 2 == 0 else "Xỉu"
-    return result, float(score), 100.0 - float(score)
-
-# Gửi kết quả tự động
-def auto_send():
-    last_session = None
+def auto_fetch_and_send():
+    global last_session
     while True:
         try:
             res = requests.get(API_URL)
             data = res.json()
-            session = data.get("current_session")
-            md5 = data.get("current_md5", "")
-            result = data.get("current_result", "")
-            pattern = data.get("used_pattern", "")
-
-            if session != last_session:
-                last_session = session
-                pred, pt, px = analyze_md5_detailed(md5)
-                next_pred = "TÀI" if pattern[-1:] == "X" else "XỈU"
-
-                msg = (
-                    f"<b>🎯 PHIÊN:</b> <code>{session}</code>\n"
-                    f"<b>🔢 MD5:</b> <code>{md5}</code>\n"
-                    f"<b>🏁 API:</b> <b>{result.upper()}</b>\n\n"
-                    f"<b>🧠 PHÂN TÍCH:</b> <b>{pred}</b>\n"
-                    f"📊 Tài: <b>{pt:.1f}%</b> | Xỉu: <b>{px:.1f}%</b>\n"
-                    f"<b>📈 PATTERN:</b> <code>{pattern}</code>\n"
-                    f"<b>🔮 DỰ ĐOÁN SAU:</b> <b>{next_pred}</b>\n"
-                    f"<b>👑 ADMIN:</b> <b>ExTaiXiu - MR DANEl</b>\n"
-                    f"<i>🤖 Auto update mỗi 5 giây</i>"
+            if data["current_session"] != last_session:
+                msg = format_hitclub_message(
+                    data["current_session"],
+                    data["current_dice"],
+                    data["current_result"],
+                    data["next_session"],
+                    data["current_md5"]
                 )
-                bot.send_message(CHAT_ID, msg, parse_mode="HTML")
-            time.sleep(5)
+                bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
+                last_session = data["current_session"]
         except Exception as e:
-            print("Lỗi:", e)
-            time.sleep(10)
+            print(f"Lỗi: {e}")
+        time.sleep(5)
 
-# Khởi chạy bot + Flask
-if __name__ == '__main__':
-    Thread(target=run_flask).start()
-    Thread(target=auto_send).start()
+@bot.message_handler(commands=["test", "check"])
+def handle_test(message):
+    if str(message.chat.id) == str(CHAT_ID):
+        try:
+            res = requests.get(API_URL)
+            data = res.json()
+            msg = format_hitclub_message(
+                data["current_session"],
+                data["current_dice"],
+                data["current_result"],
+                data["next_session"],
+                data["current_md5"]
+            )
+            bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
+        except Exception as e:
+            bot.send_message(CHAT_ID, f"Lỗi khi gọi API: {e}")
+
+@app.route("/")
+def home():
+    return "✅ Bot is running"
+
+def run_flask():
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+
+def run_bot():
+    bot.infinity_polling()
+
+if __name__ == "__main__":
+    threading.Thread(target=run_flask).start()
+    threading.Thread(target=auto_fetch_and_send).start()
+    run_bot()
